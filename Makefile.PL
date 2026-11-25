@@ -4,8 +4,14 @@ use warnings;
 use ExtUtils::MakeMaker;
 use PDL::Core::Dev;
 
+my $brew_prefix = '';
+if ($^O eq 'darwin') {
+    chomp($brew_prefix = `brew --prefix 2>/dev/null` || '');
+}
+my @inc_dirs = ('/usr/include/onnxruntime', '/usr/include', '/usr/local/include/onnxruntime');
+push @inc_dirs, "$brew_prefix/include/onnxruntime", "$brew_prefix/include" if $brew_prefix;
 my $ort_inc;
-for my $dir ('/usr/include/onnxruntime', '/usr/include', '/usr/local/include/onnxruntime') {
+for my $dir (@inc_dirs) {
     if (-f "$dir/onnxruntime_c_api.h") {
         $ort_inc = $dir;
         last;
@@ -13,12 +19,11 @@ for my $dir ('/usr/include/onnxruntime', '/usr/include', '/usr/local/include/onn
 }
 
 if (!$ort_inc) {
-    warn "libonnxruntime-dev (onnxruntime_c_api.h) is required to build PDL::ML::Engine::ONNX.\n";
-    exit 0;
+    die "libonnxruntime-dev (onnxruntime_c_api.h) is required to build PDL::ML::Engine::ONNX.\n";
 }
+my $lib_flag = ($brew_prefix && $ort_inc =~ m{^\$brew_prefix}) ? "-L$brew_prefix/lib " : '';
 
 my $pdl_inc = PDL::Core::Dev::PDL_INCLUDE();
-$pdl_inc =~ s/^"|"$//g;
 
 WriteMakefile(
     NAME               => 'PDL::ML::Engine::ONNX',
@@ -37,20 +42,21 @@ WriteMakefile(
     PREREQ_PM => {
         'PDL' => '2.080',
     },
-    INC   => "-I. $pdl_inc -I$ort_inc",
+    INC     => '-I. ' . $pdl_inc . ' -I' . $ort_inc,
     XSMULTI => 1,
-    LIBS  => ['-lonnxruntime'],
-    clean => { FILES => 'PDL-ML-Engine-ONNX-* *.o ONNX.bs ONNX.c' },
+    LIBS    => [ $lib_flag . '-lonnxruntime' ],
+    ($brew_prefix ? (dynamic_lib => { OTHERLDFLAGS => "-L$brew_prefix/lib -Wl,-rpath,$brew_prefix/lib -lonnxruntime" }) : ()),
+    clean   => { FILES => 'PDL-ML-Engine-ONNX-* *.o ONNX.bs ONNX.c' },
     META_MERGE => {
         'meta-spec' => { version => 2 },
         resources   => {
             repository => {
                 type => 'git',
-                url  => 'https://github.com/GoogleCloudPlatform/google-auth-library-perl.git',
-                web  => 'https://github.com/GoogleCloudPlatform/google-auth-library-perl',
+                url  => 'https://github.com/PDLPorters/PDL-ML-Engine-ONNX.git',
+                web  => 'https://github.com/PDLPorters/PDL-ML-Engine-ONNX',
             },
             bugtracker => {
-                web => 'https://github.com/GoogleCloudPlatform/google-auth-library-perl/issues',
+                web => 'https://github.com/PDLPorters/PDL-ML-Engine-ONNX/issues',
             },
         },
     },
